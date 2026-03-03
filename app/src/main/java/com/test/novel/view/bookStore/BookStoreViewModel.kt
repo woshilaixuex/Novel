@@ -3,14 +3,16 @@ package com.test.novel.view.bookStore
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.test.novel.model.mapper.BookMapper
+import com.test.novel.utils.BookStoreStateDataMaker
 import com.test.novel.utils.WebCrawler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -44,7 +46,6 @@ class BookStoreViewModel @Inject constructor() : ViewModel() {
             is BookStoreIntent.Refresh -> {
 
             }
-
             is BookStoreIntent.LoadMore -> {
 
             }
@@ -52,13 +53,28 @@ class BookStoreViewModel @Inject constructor() : ViewModel() {
             is BookStoreIntent.Search -> {
 
             }
-
             is BookStoreIntent.InitData -> {
                 Log.d("TAG", "processIntent: ${_bookStoreState.value}")
                 withContext(Dispatchers.IO) {
                     val hot = WebCrawler.fetchBQGTop()
-                    _bookStoreState.value =
-                        _bookStoreState.value.copy(rank = hot)
+                }
+            }
+            is BookStoreIntent.LoadDataWithNet -> {
+
+            }
+            else -> {
+                // 模拟网络请求
+                withContext(Dispatchers.IO) {
+                    _bookStoreState.value = _bookStoreState.value.copy(
+                        isLoading = true
+                    )
+                    delay(2000)
+                    val hotDtoList = BookStoreStateDataMaker.generateMockBooks()
+                    val hot = BookMapper.dtoListToVoList(hotDtoList)
+                    _bookStoreState.value = _bookStoreState.value.copy(
+                        rank = hot,
+                        isLoading = false
+                    )
                 }
             }
         }

@@ -1,5 +1,6 @@
 package com.test.novel.view.bookStore
 
+import android.annotation.SuppressLint
 import android.graphics.Color
 import android.util.Log
 import android.view.LayoutInflater
@@ -8,7 +9,6 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment.Companion.findNavController
-import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.test.novel.R
@@ -17,24 +17,28 @@ import com.test.novel.databinding.RandomViewBinding
 import com.test.novel.databinding.RankBookItemBinding
 import com.test.novel.databinding.RankViewBinding
 import com.test.novel.model.BookBrief
+import com.test.novel.model.vo.BookVo
 import com.test.novel.utils.SizeUtils
 import com.test.novel.view.customView.GridSpacingItemDecoration
-import com.test.novel.view.novelPage.NovelFragment
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.serialization.json.Json
 
-class BookStoreAdapter(private val fragment: Fragment, private val viewModel: BookStoreViewModel,val onDataLoaded:()->Unit) :
+class BookStoreAdapter(
+    private val onBookClick: (BookVo) -> Unit,
+    private val onDataLoaded:()->Unit) :
     RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-    private val rankViewAdapter = RankViewAdapter()
-    private val randomViewAdapter = RandomViewAdapter()
+    private var rankList: List<BookVo> = emptyList()
+    private var randomList: List<BookVo> = emptyList()
+    private val rankViewAdapter = RankViewAdapter(onBookClick)
+    private val randomViewAdapter = RandomViewAdapter(onBookClick)
 
     companion object {
         const val TYPE_RANK = 0
         const val TYPE_RANDOM = 1
     }
-
+    // 排行视图Holder
     inner class RankViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val binding = RankViewBinding.bind(view)
         val recommend = binding.recommendRank
@@ -43,22 +47,17 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
         val hotText = binding.hotRankText
         val rankView = binding.rankBookList
     }
-
+    // 推荐视图Holder
     inner class RandomViewHolder(view: View) : RecyclerView.ViewHolder(view) {
         private val binding = RandomViewBinding.bind(view)
         val randomView = binding.randomBookList
     }
+    // 排行适配器
+    inner class RankViewAdapter(
+        private val onBookClick: (BookVo) -> Unit
+    ): RecyclerView.Adapter<RankViewAdapter.RankViewItemHolder>() {
 
-    inner class RankViewAdapter : RecyclerView.Adapter<RankViewAdapter.RankViewItemHolder>() {
-
-        init {
-            viewModel.bookStoreState.onEach { state ->
-                Log.d("TAG", ": $state")
-                updateData(state.rank)
-            }.launchIn(fragment.viewLifecycleOwner.lifecycleScope)
-        }
-
-        private var rankList: List<BookBrief> = viewModel.bookStoreState.value.rank
+        private var rankList: List<BookVo> = emptyList()
 
         inner class RankViewItemHolder(view: View) : RecyclerView.ViewHolder(view) {
             private val binding = RankBookItemBinding.bind(view)
@@ -77,8 +76,7 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
 
         override fun onBindViewHolder(holder: RankViewItemHolder, position: Int) {
             holder.main.setOnClickListener {
-                val action = BookStoreFragmentDirections.actionBookStoreFragmentToNovelFragment(Json.encodeToString(BookBrief.serializer(), rankList[position]))
-                findNavController(fragment).navigate(action)
+                onBookClick(rankList[position])
             }
             val book = rankList[position]
             holder.bookTitle.text = book.title
@@ -87,8 +85,8 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
                 holder.rank.setTextColor(Color.parseColor("#cfa570"))
             }
             //去除两边的括号
-            holder.type.text = book.type.joinToString(" ") { it }
-            Glide.with(fragment)
+            holder.type.text = book.categories.joinToString(" ") { it }
+            Glide.with(holder.itemView.context)
                 .load(book.coverUrl)
                 .placeholder(R.drawable.cover1)
                 .into(holder.bookCover)
@@ -98,23 +96,29 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
             return rankList.size
         }
 
-        private fun updateData(newList: List<BookBrief>) {
-            if (newList != rankList) {
-                rankList = newList
-                println(this.rankList)
-                notifyItemRangeChanged(0, newList.size)
+        fun updateData(newList: List<BookVo>) {
+            val oldSize = rankList.size
+            rankList = newList
+            if (oldSize > 0 && newList.isEmpty()) {
+                notifyItemRangeRemoved(0, oldSize) // 移除所有item
+            } else if (oldSize == 0 && newList.isNotEmpty()) {
+                notifyItemRangeInserted(0, newList.size) // 插入新item
+            } else {
+                notifyItemRangeChanged(0, maxOf(oldSize, newList.size)) // 更新变化
             }
         }
     }
+    // 推荐适配器
+    inner class RandomViewAdapter(
+        onBookClick: (BookVo) -> Unit
+    ) : RecyclerView.Adapter<RandomViewAdapter.RandomViewItemHolder>() {
+//        init {
+//            viewModel.bookStoreState.onEach { state ->
+//                updateData(state.recommend)
+//            }.launchIn(fragment.viewLifecycleOwner.lifecycleScope)
+//        }
 
-    inner class RandomViewAdapter : RecyclerView.Adapter<RandomViewAdapter.RandomViewItemHolder>() {
-        init {
-            viewModel.bookStoreState.onEach { state ->
-                updateData(state.recommend)
-            }.launchIn(fragment.viewLifecycleOwner.lifecycleScope)
-        }
-
-        private var randomList: List<BookBrief> = viewModel.bookStoreState.value.recommend
+        private var randomList: List<BookVo> = emptyList()
 
         inner class RandomViewItemHolder(view: View) : RecyclerView.ViewHolder(view) {
             private val binding = RandomBookItemBinding.bind(view)
@@ -140,14 +144,20 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
             return randomList.size
         }
 
-        private fun updateData(newList: List<BookBrief>) {
+        fun updateData(newList: List<BookVo>) {
             Log.e("TAG", "updateData: $newList")
-            if (newList != randomList) {
-                randomList = newList
-                notifyItemRangeChanged(0, newList.size)
+            val oldSize = randomList.size
+            randomList = newList
+            if (oldSize > 0 && newList.isEmpty()) {
+                notifyItemRangeRemoved(0, oldSize) // 移除所有item
+            } else if (oldSize == 0 && newList.isNotEmpty()) {
+                notifyItemRangeInserted(0, newList.size) // 插入新item
+            } else {
+                notifyItemRangeChanged(0, maxOf(oldSize, newList.size)) // 更新变化
             }
         }
     }
+
 
     override fun getItemViewType(position: Int): Int {
         return when (position) {
@@ -158,7 +168,6 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
-//        println("dsadasdasdasdasdd")
         return when (viewType) {
             TYPE_RANK -> {
                 val view =
@@ -201,6 +210,35 @@ class BookStoreAdapter(private val fragment: Fragment, private val viewModel: Bo
     override fun getItemCount(): Int {
         return 2
     }
+    // 数据更新方法
+    fun updateRankList(newList: List<BookVo>) {
+        if (newList != rankList) {
+            rankList = newList
+            rankViewAdapter.updateData(newList)
+            onDataLoaded() // 通知数据加载完成
+        }
+    }
+    fun updateRandomList(newList: List<BookVo>) {
+        if (newList != randomList) {
+            randomList = newList
+            randomViewAdapter.updateData(newList)
+        }
+    }
 
+    // 清理资源
+    fun clear() {
+        val rankSize = rankList.size
+        val randomSize = randomList.size
+        
+        rankList = emptyList()
+        randomList = emptyList()
+        
+        if (rankSize > 0) {
+            rankViewAdapter.updateData(rankList)
+        }
+        if (randomSize > 0) {
+            randomViewAdapter.updateData(randomList)
+        }
+    }
 
 }

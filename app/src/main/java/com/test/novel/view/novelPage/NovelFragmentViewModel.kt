@@ -110,6 +110,10 @@ class NovelFragmentViewModel @Inject constructor(
                 is BookIntent.GetContentFromLocal -> {
                     getLocalContent(intent.bookId)
                 }
+                
+                is BookIntent.LoadMockContent -> {
+                    loadMockContent(intent.bookBrief)
+                }
             }
         }
     }
@@ -169,6 +173,90 @@ class NovelFragmentViewModel @Inject constructor(
             }
         }
     }
+    
+    private fun loadMockContent(bookBrief: BookBrief) {
+        viewModelScope.launch {
+            // 创建模拟章节内容
+            val mockChapters = createMockChapters(bookBrief)
+            val pages = mutableListOf<PageState>()
+            
+            mockChapters.forEachIndexed { index, chapter ->
+                pages.add(
+                    PageState(
+                        title = chapter.title,
+                        showTitle = true,
+                        chapterIndex = index + 1,
+                        text = chapter.content,
+                        load = false
+                    )
+                )
+            }
+            
+            sendIntent(BookIntent.SetContent(pages))
+        }
+    }
+    
+    private fun createMockChapters(bookBrief: BookBrief): List<MockChapter> {
+        return listOf(
+            MockChapter(
+                title = "第一章 开始",
+                content = """
+                    在这个浩瀚的宇宙中，存在着无数个世界，每个世界都有着独特的规则和力量体系。
+                    
+                    我们的主角，叶辰，是一个来自地球的普通青年，但他的命运却因为一次意外而彻底改变。
+                    
+                    "这是什么地方？"叶辰看着眼前陌生的环境，心中充满了疑惑和不安。
+                    
+                    周围是茂密的森林，空气中弥漫着淡淡的雾气，远处的山峦若隐若现。
+                    
+                    突然，一道光芒闪过，一个神秘的身影出现在他面前...
+                """.trimIndent()
+            ),
+            MockChapter(
+                title = "第二章 修炼",
+                content = """
+                    "欢迎来到修炼世界。"神秘人缓缓开口，声音中带着一种难以言喻的威严。
+                    
+                    叶辰警惕地看着对方："你到底是谁？这里是哪里？"
+                    
+                    "这里是玄天大陆，一个修炼者的世界。"神秘人回答道，"至于我，你可以称我为引路人。"
+                    
+                    "修炼？"叶辰眼中闪过一丝明悟，"就像小说中写的那样？"
+                    
+                    "没错。"引路人点头，"在这里，力量就是一切。弱者只能任人宰割，而强者则可以俯瞰众生。"
+                    
+                    说着，引路人伸出手，一团柔和的光芒出现在他的掌心。
+                    
+                    "这是给你的礼物，"他说道，"有了它，你就能开始自己的修炼之路。"
+                """.trimIndent()
+            ),
+            MockChapter(
+                title = "第三章 初试",
+                content = """
+                    叶辰接过那团光芒，只觉得一股暖流涌遍全身。
+                    
+                    他能感觉到，自己的身体正在发生着奇妙的变化。
+                    
+                    "这就是修炼的力量吗？"叶辰握紧拳头，感受着体内涌动的力量。
+                    
+                    "这只是开始。"引路人说道，"修炼之路漫长而艰险，需要你不断努力。"
+                    
+                    叶辰重重地点头："我明白，无论多么困难，我都会坚持下去。"
+                    
+                    引路人满意地点头："很好，那么我先教你基础的修炼法门。"
+                    
+                    接下来的时间里，叶辰认真学习着修炼的基础知识。
+                    
+                    他知道，这只是开始，前方的路还很长...
+                """.trimIndent()
+            )
+        )
+    }
+    
+    data class MockChapter(
+        val title: String,
+        val content: String
+    )
 }
 
 

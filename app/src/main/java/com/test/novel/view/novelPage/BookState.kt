@@ -50,5 +50,7 @@ sealed class BookIntent {
 
     data class GetContentFromLocal(val bookId:Int):BookIntent()
 
+    data class LoadMockContent(val bookBrief: BookBrief) : BookIntent()
+
 }
 
