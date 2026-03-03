@@ -43,9 +43,7 @@ class NovelFragment : Fragment() {
         try {
             val bookBrief = Json.decodeFromString(BookBrief.serializer(), args.bookBrief)
             novelFragmentViewModel.sendIntent(BookIntent.Init(bookBrief))
-            if (bookBrief.isLocal) {
-                novelFragmentViewModel.sendIntent(BookIntent.GetContentFromLocal(bookBrief.bookId))
-            }
+            
         } catch (e: Exception) {
             Log.e("NovelFragment", "Error parsing book brief", e)
         }

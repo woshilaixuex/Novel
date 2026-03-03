@@ -34,21 +34,6 @@
     </fragment>
 
     <fragment
-        android:id="@+id/HomeFragment"
-        android:name="com.test.novel.view.homePage.HomeFragment"
-        android:label="NovelFragment"
-        tools:layout="@layout/fragment_home">
-        <!--        <action-->
-        <!--            android:id="@+id/action_firstFragment_to_secondFragment"-->
-        <!--            app:destination="@id/secondFragment" />-->
-        <action
-            android:id="@+id/action_HomeFragment_to_NovelFragment"
-            app:destination="@id/BookShelfFragment"
-            app:launchSingleTop="false"
-            app:popUpToInclusive="false" />
-    </fragment>
-
-    <fragment
         android:id="@+id/BookShelfFragment"
         android:name="com.test.novel.view.bookShelfPage.BookShelfFragment"
         android:label="BookShelfFragment"
@@ -59,9 +44,6 @@
 <!--        <action-->
 <!--            android:id="@+id/action_BookShelfFragment_to_userFragment"-->
 <!--            app:destination="@id/userFragment" />-->
-        <action
-            android:id="@+id/action_BookShelfFragment_to_NovelFragment"
-            app:destination="@id/NovelFragment" />
 
         <action
             android:id="@+id/action_BookShelfFragment_to_ReadFragment"
@@ -74,8 +56,8 @@
         android:label="BookShelfFragment"
         tools:layout="@layout/fragment_book_shelf">
         <action
-            android:id="@+id/action_BookStoreFragment_to_NovelFragment"
-            app:destination="@id/NovelFragment" />
+            android:id="@+id/action_BookStoreFragment_to_introductionFragment"
+            app:destination="@id/introductionFragment" />
     </fragment>
 
     <fragment
@@ -97,6 +79,22 @@
         android:name="com.test.novel.view.searchPage.SearchFragment"
         android:label="SearchFragment"
         tools:layout="@layout/fragment_search">
+    </fragment>
+    <fragment
+        android:id="@+id/introductionFragment"
+        android:name="com.test.novel.view.introductionPage.IntroductionFragment"
+        android:label="fragment_introduction"
+        tools:layout="@layout/fragment_introduction" >
+        <argument
+            android:name="bookVo"
+            app:argType="com.test.novel.model.vo.BookVo"
+            android:defaultValue="@null" />
+        <action
+            android:id="@+id/action_introductionFragment_to_ReadFragment"
+            app:destination="@id/ReadFragment" />
+        <action
+            android:id="@+id/action_introductionFragment_to_NovelFragment"
+            app:destination="@id/NovelFragment" />
     </fragment>
 
 

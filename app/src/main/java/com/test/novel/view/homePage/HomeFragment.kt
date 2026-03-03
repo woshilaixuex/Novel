@@ -37,7 +37,6 @@ class HomeFragment : Fragment() {
         binding.button.setOnClickListener {
             val args = Bundle()
             args.putInt("novelId", 12436)
-            findNavController().navigate(R.id.action_HomeFragment_to_NovelFragment, args)
         }
 
     }

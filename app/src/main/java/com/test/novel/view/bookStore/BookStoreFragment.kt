@@ -12,13 +12,18 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.view.marginTop
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.test.novel.R
 import com.test.novel.databinding.FragmentBookShelfBinding
 import com.test.novel.databinding.FragmentBookStoreBinding
 import com.test.novel.model.BookBrief
+import com.test.novel.model.vo.BookVo
 import com.test.novel.utils.SizeUtils
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
+import kotlinx.serialization.json.Json
 import kotlin.math.log
 
 class BookStoreFragment : Fragment() {
@@ -31,7 +36,7 @@ class BookStoreFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        viewModel.setIntent(BookStoreIntent.InitData)
+        viewModel.setIntent(BookStoreIntent.DefaultData)
     }
 
     override fun onCreateView(
@@ -56,15 +61,48 @@ class BookStoreFragment : Fragment() {
             insets
         }
         val navController = findNavController()
-        val adapter = BookStoreAdapter(this, viewModel){
-            binding.swipe.isRefreshing = false
-        }
+        val adapter = BookStoreAdapter(
+            onBookClick = { book ->
+                val action = BookStoreFragmentDirections.actionBookStoreFragmentToIntroductionFragment(
+                    book
+                )
+                navController.navigate(action)
+            },
+            onDataLoaded = {
+                binding.swipe.isRefreshing = false
+                binding.loadingState.visibility = View.GONE
+            }
+        )
         binding.recycle.adapter = adapter
+        // 监听加载状态
+        viewModel.bookStoreState.onEach { state ->
+            adapter.updateRankList(state.rank)
+            adapter.updateRandomList(state.recommend)
+            // 控制加载状态的显示
+            binding.loadingState.visibility = if (state.isLoading) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+            // 控制用户交互
+            binding.root.isClickable = !state.isLoading
+            binding.recycle.isEnabled = !state.isLoading
+            binding.swipe.isEnabled = !state.isLoading
+            binding.SearchBar.isEnabled = !state.isLoading
+            // 数据加载完成时隐藏刷新状态
+            if (!state.isLoading && state.rank.isNotEmpty()) {
+                binding.swipe.isRefreshing = false
+                binding.loadingState.visibility = View.GONE
+            }
+        }.launchIn(lifecycleScope)
         binding.SearchBar.setOnClickListener {
             navController.navigate(R.id.SearchFragment)
         }
         binding.swipe.setOnRefreshListener {
-            viewModel.setIntent(BookStoreIntent.InitData)
+            // 显示加载状态
+            adapter.clear()
+            binding.loadingState.visibility = View.VISIBLE
+            viewModel.setIntent(BookStoreIntent.DefaultData)
         }
     }
 

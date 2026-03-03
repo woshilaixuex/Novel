@@ -14,6 +14,11 @@ import java.nio.charset.Charset
 import java.util.concurrent.TimeUnit
 import kotlin.time.measureTime
 
+/**
+ * 网络爬虫工具类
+ * @deprecated 该类已弃用，请使用其他数据源
+ */
+@Deprecated(message = "WebCrawler is deprecated. Please use other data sources.", level = DeprecationLevel.WARNING)
 object WebCrawler {
 
     // 配置 OkHttpClient，启用连接池
