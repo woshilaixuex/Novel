@@ -10,13 +10,10 @@
         android:name="com.test.novel.view.novelPage.NovelFragment"
         android:label="NovelFragment"
         tools:layout="@layout/fragment_novel">
-<!--        <action-->
-<!--            android:id="@+id/action_firstFragment_to_secondFragment"-->
-<!--            app:destination="@id/secondFragment" />-->
         <argument
             android:name="bookBrief"
-            app:argType="string"
-            android:defaultValue="" />
+            android:defaultValue=""
+            app:argType="string" />
     </fragment>
 
     <fragment
@@ -24,13 +21,10 @@
         android:name="com.test.novel.view.newNovelPage.ReadFragment"
         android:label="ReadFragment"
         tools:layout="@layout/fragment_read">
-        <!--        <action-->
-        <!--            android:id="@+id/action_firstFragment_to_secondFragment"-->
-        <!--            app:destination="@id/secondFragment" />-->
         <argument
-            android:name="bookBrief"
-            app:argType="string"
-            android:defaultValue="" />
+            android:name="chapterId"
+            android:defaultValue="0"
+            app:argType="integer" />
     </fragment>
 
     <fragment
@@ -38,12 +32,7 @@
         android:name="com.test.novel.view.bookShelfPage.BookShelfFragment"
         android:label="BookShelfFragment"
         tools:layout="@layout/fragment_book_shelf">
-<!--        <action-->
-<!--            android:id="@+id/action_BookShelfFragment_to_bookStoreFragment"-->
-<!--            app:destination="@id/bookStoreFragment" />-->
-<!--        <action-->
-<!--            android:id="@+id/action_BookShelfFragment_to_userFragment"-->
-<!--            app:destination="@id/userFragment" />-->
+
 
         <action
             android:id="@+id/action_BookShelfFragment_to_ReadFragment"
@@ -57,7 +46,11 @@
         tools:layout="@layout/fragment_book_shelf">
         <action
             android:id="@+id/action_BookStoreFragment_to_introductionFragment"
-            app:destination="@id/introductionFragment" />
+            app:destination="@id/introductionFragment">
+            <argument
+                android:name="bookVo"
+                app:argType="com.test.novel.model.vo.BookVo" />
+        </action>
     </fragment>
 
     <fragment
@@ -87,11 +80,17 @@
         tools:layout="@layout/fragment_introduction" >
         <argument
             android:name="bookVo"
+            android:defaultValue="@null"
             app:argType="com.test.novel.model.vo.BookVo"
-            android:defaultValue="@null" />
+            app:nullable="true" />
         <action
             android:id="@+id/action_introductionFragment_to_ReadFragment"
-            app:destination="@id/ReadFragment" />
+            app:destination="@id/ReadFragment">
+            <argument
+                android:name="chapterId"
+                android:defaultValue="0"
+                app:argType="integer" />
+        </action>
         <action
             android:id="@+id/action_introductionFragment_to_NovelFragment"
             app:destination="@id/NovelFragment" />

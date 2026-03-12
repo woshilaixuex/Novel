@@ -11,21 +11,16 @@ import androidx.constraintlayout.widget.ConstraintSet
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.core.view.marginTop
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.test.novel.R
-import com.test.novel.databinding.FragmentBookShelfBinding
 import com.test.novel.databinding.FragmentBookStoreBinding
-import com.test.novel.model.BookBrief
-import com.test.novel.model.vo.BookVo
 import com.test.novel.utils.SizeUtils
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.serialization.json.Json
-import kotlin.math.log
 
+@AndroidEntryPoint
 class BookStoreFragment : Fragment() {
 
     companion object {
@@ -36,7 +31,7 @@ class BookStoreFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        viewModel.setIntent(BookStoreIntent.DefaultData)
+        viewModel.sendIntent(BookStoreIntent.DefaultData)
     }
 
     override fun onCreateView(
@@ -100,9 +95,9 @@ class BookStoreFragment : Fragment() {
         }
         binding.swipe.setOnRefreshListener {
             // 显示加载状态
-            adapter.clear()
+            viewModel.sendIntent(BookStoreIntent.ClearData)
             binding.loadingState.visibility = View.VISIBLE
-            viewModel.setIntent(BookStoreIntent.DefaultData)
+            viewModel.sendIntent(BookStoreIntent.DefaultData)
         }
     }
 

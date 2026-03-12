@@ -10,6 +10,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import com.test.novel.R
+import com.test.novel.view.customView.novel.ReadPageProvider.PageData
 import kotlin.math.abs
 
 class PageTurnView @JvmOverloads constructor(
@@ -136,7 +137,9 @@ class PageTurnView @JvmOverloads constructor(
      */
     private fun loadPages() {
         val provider = pageProvider ?: return
-        if (provider.getPageCount() == 0)
+        val pageCount = provider.getPageCount()
+        Log.d("PageTurnView", "loadPages() called, pageCount: $pageCount, currentPageIndex: $currentPageIndex")
+        if (pageCount == 0)
             return
         // 防止越界
         if (currentPageIndex < 0) currentPageIndex = 0
@@ -150,6 +153,7 @@ class PageTurnView @JvmOverloads constructor(
 
         // 加载当前页
         currentPage = pageFactory.createPageView().apply {
+            Log.d("PageTurnView", "Binding page at index: $currentPageIndex")
             provider.bindPage(this, currentPageIndex)
         }
         addView(currentPage)
@@ -243,8 +247,9 @@ class PageTurnView @JvmOverloads constructor(
      * @param navigateToNewPage 是否立即导航到新添加的页面
      * @return 新页面的索引，如果添加失败则返回-1
      */
-    fun addPage(pageContent: PageType, navigateToNewPage: Boolean = true): Int {
+    fun addPage(pageContent: PageData, navigateToNewPage: Boolean = true): Int {
         val provider = pageProvider
+        Log.d("PageTurnView", "addPage called, provider: $provider, pageContent: $pageContent")
 
         // 检查Provider是否支持动态添加页面
         if (provider !is PageProvider) {
@@ -254,6 +259,7 @@ class PageTurnView @JvmOverloads constructor(
 
         // 调用提供者添加页面
         val newPageIndex = provider.addPage(pageContent)
+        Log.d("PageTurnView", "addPage result: newPageIndex=$newPageIndex, navigateToNewPage=$navigateToNewPage")
 
         if (newPageIndex >= 0) {
             if (navigateToNewPage) {
@@ -276,7 +282,7 @@ class PageTurnView @JvmOverloads constructor(
      * @param navigateToNewPage 是否立即导航到新添加的页面
      * @return 是否添加成功
      */
-    fun appendPage(pageContent: PageType, navigateToNewPage: Boolean = true): Boolean {
+    fun appendPage(pageContent: PageData, navigateToNewPage: Boolean = true): Boolean {
         return addPage(pageContent, navigateToNewPage) >= 0
     }
 

@@ -4,7 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.parcelize)
     kotlin("plugin.serialization")
     id("dagger.hilt.android.plugin")
-    kotlin("kapt")
+    alias(libs.plugins.ksp)
     id("androidx.navigation.safeargs.kotlin")
 }
 
@@ -40,11 +40,36 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    
+    configurations.all {
+        resolutionStrategy {
+            force("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+            force("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22")
+            force("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22")
+            force("org.jetbrains.kotlin:kotlin-reflect:1.9.22")
+            
+            // Exclude problematic versions
+            eachDependency {
+                if (requested.group == "org.jetbrains.kotlin") {
+                    useVersion("1.9.22")
+                }
+            }
+        }
+    }
 }
 
 dependencies {
-
-    implementation(libs.androidx.core.ktx)
+    // Force Kotlin versions to prevent conflicts
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.22")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.22")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.22")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:1.9.22")
+    
+    // Exclude problematic Kotlin versions from specific dependencies
+    implementation(libs.androidx.core.ktx) {
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk7")
+        exclude(group = "org.jetbrains.kotlin", module = "kotlin-stdlib-jdk8")
+    }
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
@@ -70,11 +95,11 @@ dependencies {
 
     //room
     implementation(libs.androidx.room.runtime)
-    kapt(libs.androidx.room.compiler)
+    ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.room.ktx)
     //di
     implementation(libs.hilt.android)
-    kapt(libs.hilt.android.compiler)
+    ksp(libs.hilt.android.compiler)
     //serialization
     implementation(libs.kotlinx.serialization.json)
     //navigation

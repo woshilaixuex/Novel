@@ -7,7 +7,7 @@ import com.test.novel.database.chapter.ChapterDao
 import com.test.novel.database.readHistory.ReadHistory
 import com.test.novel.database.readHistory.ReadHistoryDao
 import com.test.novel.model.BookBrief
-import com.test.novel.utils.WebCrawler
+// import com.test.novel.utils.WebCrawler // 移除WebCrawler引用
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

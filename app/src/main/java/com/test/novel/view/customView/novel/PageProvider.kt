@@ -1,6 +1,7 @@
 package com.test.novel.view.customView.novel
 
 import android.view.View
+import com.test.novel.view.customView.novel.ReadPageProvider.PageData
 
 /**
  * 页面内容提供者接口
@@ -20,9 +21,9 @@ interface PageProvider {
 
     /**
      * 添加新页面
-     * @param pageContent 页面内容
+     * @param PageData 页面内容
      * @return 新页面的索引，添加失败则返回-1
      */
-    fun addPage(pageContent: PageType): Int
+    fun addPage(pageData: PageData): Int
 
 }

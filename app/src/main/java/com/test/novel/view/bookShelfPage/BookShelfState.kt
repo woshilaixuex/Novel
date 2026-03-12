@@ -1,10 +1,12 @@
 package com.test.novel.view.bookShelfPage
 
+import android.os.Parcelable
 import com.test.novel.database.bookShelf.BookInShelf
+import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 
 
-@Serializable
+@Parcelize
 data class BookShelfState(
 
     val bookInShelfList:List<BookInShelf> = listOf(),
@@ -16,7 +18,7 @@ data class BookShelfState(
     val deleteBooks : List<Int> = listOf(),
 
     val openId : Int = -1
-)
+) : Parcelable
 
 sealed class BookShelfIntent {
 

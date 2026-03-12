@@ -1,8 +1,8 @@
 package com.test.novel.view.newNovelPage
 
-import android.annotation.SuppressLint
 import android.graphics.Canvas
 import android.os.Bundle
+import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
@@ -15,39 +15,33 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.test.novel.R
+import com.test.novel.databinding.FragmentCoverReadBinding
 import com.test.novel.databinding.FragmentPageBinding
 import com.test.novel.databinding.FragmentReadBinding
-import com.test.novel.model.BookBrief
+import com.test.novel.model.vo.ReadingPageVo
 import com.test.novel.utils.SizeUtils.navigationBarHeight
 import com.test.novel.utils.SizeUtils.statusBarHeight
+import com.test.novel.view.customView.novel.PageProvider
 import com.test.novel.view.customView.novel.PageTurnListener
 import com.test.novel.view.customView.novel.PageTurnView
-import com.test.novel.view.customView.novel.PageType
 import com.test.novel.view.customView.novel.ReadPageProvider
-import com.test.novel.view.novelPage.NovelFragment
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 
-private const val BOOK_BRIEF = "bookBrief"
+private const val CHAPTER_ID = "chapterId"
 @AndroidEntryPoint
 class ReadFragment : Fragment() {
-    private lateinit var binding :FragmentReadBinding
-    private lateinit var bookBrief: BookBrief
+    private var _binding :FragmentReadBinding? = null
+    private val binding get() = _binding!!
     private lateinit var pageProvider: ReadPageProvider
     private lateinit var pageTurnView: PageTurnView
     private val viewModel: ReadViewModel by viewModels()
-    private lateinit var toolBinding: FragmentPageBinding
+    private lateinit var toolBinding: FragmentCoverReadBinding
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        arguments?.let {
-            bookBrief = Json.decodeFromString(BookBrief.serializer(), it.getString(BOOK_BRIEF).toString())
-        }
-        pageProvider = ReadPageProvider()
-        viewModel.loadChapter(bookBrief.bookId)
-        toolBinding = FragmentPageBinding.inflate(
+        toolBinding = FragmentCoverReadBinding.inflate(
             LayoutInflater.from(requireContext().applicationContext),
             null,
             false
@@ -57,20 +51,29 @@ class ReadFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_read, container, false)
+    ): View {
+        _binding = FragmentReadBinding.inflate(inflater, container, false)
+        return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        binding = FragmentReadBinding.bind(view)
+        toolBinding = FragmentCoverReadBinding.inflate(layoutInflater)
+        // 根据章节加载数据
+        var chapterId = 0
+        arguments?.let {
+            chapterId = it.getInt(CHAPTER_ID)
+        }
+        viewModel.loadChapter(chapterId)
+        // 全屏阅读
         ViewCompat.setOnApplyWindowInsetsListener(binding.main) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, statusBarHeight, systemBars.right, 0)
             insets
         }
+        // 绑定的View由业务模型决定，业务模型可以根据本地用户信息获取，默认是Cover
         pageTurnView = binding.page
-
+        pageProvider = ReadPageProvider()
         pageTurnView.pageProvider = pageProvider
         pageTurnView.pageListener = object : PageTurnListener{
             override fun onPageChanged(pageIndex: Int) {
@@ -78,35 +81,37 @@ class ReadFragment : Fragment() {
             }
 
             override fun onCenterClick() {
-                viewModel.showOrHideBar()
+                viewModel.sendIntent(ReadIntent.ShowOrHideBar)
             }
 
         }
-
         viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED){
-                viewModel.showBar.collect {
-                    animateBars(it)
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // 并行收集多个Flow
+                launch {
+                    viewModel.showBar.collect {
+                        animateBars(it)
+                    }
                 }
-            }
-        }
-
-        viewLifecycleOwner.lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED){
-                viewModel.chapters.filter {
-                    it.isNotEmpty()
-                }.collect {
-                    paginateText(it[0].content)
+                launch {
+                    viewModel.readState
+                        .map { it.readingPageVo }
+                        .filter { it != null }
+                        .collect { pageVo ->
+                            Log.d("ReadFragment", "readState collected, pageVo: $pageVo")
+                            paginateText(pageVo!!)
+                        }
                 }
             }
         }
     }
 
-
-    private fun paginateText(text: String) {
+    private fun paginateText(pageVo: ReadingPageVo) {
+        Log.d("ReadFragment", "paginateText called, content length: ${pageVo.content.length}")
         pageTurnView.post {
             val width = pageTurnView.measuredWidth
             val height = pageTurnView.measuredHeight
+            Log.d("ReadFragment", "pageTurnView dimensions: width=$width, height=$height")
 
             toolBinding.root.measure(
                 View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
@@ -117,15 +122,25 @@ class ReadFragment : Fragment() {
             val toolNovelText = toolBinding.novelText
             // 3. 作为工具使用
             toolNovelText.isDrawEnable = false
-            toolNovelText.text = text
+            // 直接使用String类型的context
+            toolNovelText.text = pageVo.content
             toolNovelText.draw(Canvas())
 
             val pages = toolNovelText.getPages()
-            pages.forEach { page ->
-                pageTurnView.appendPage(PageType.NormalPage(page), false)
+            val totalPages = pages.size
+            Log.d("ReadFragment", "getPages() returned $totalPages pages")
+            pages.forEachIndexed { index, pageContent ->
+                // 创建PageData用于每一页
+                val pageData = ReadPageProvider.PageData(
+                    content = pageContent,
+                    pageIndex = index,
+                    totalPages = totalPages,
+                    pageType = ReadPageProvider.PageType.Cover
+                )
+                Log.d("ReadFragment", "Appending page $index, content length: ${pageContent.length}")
+                pageTurnView.appendPage(pageData,false)
             }
-//            // 4. 释放资源
-//            toolBinding.root.removeAllViews()
+            Log.d("ReadFragment", "paginateText completed, total pages added: $totalPages")
         }
     }
 
@@ -179,10 +194,9 @@ class ReadFragment : Fragment() {
     companion object {
 
         @JvmStatic
-        fun newInstance(bookBrief: BookBrief) =
-            ReadFragment().apply {
+        fun newInstance(chapterId: Int) = ReadFragment().apply {
                 arguments = Bundle().apply {
-                    putString(BOOK_BRIEF, Json.encodeToString(BookBrief.serializer(), bookBrief))
+                    putInt(CHAPTER_ID, chapterId)
                 }
             }
     }

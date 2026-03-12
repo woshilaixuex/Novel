@@ -229,10 +229,8 @@ class BookStoreAdapter(
     fun clear() {
         val rankSize = rankList.size
         val randomSize = randomList.size
-        
         rankList = emptyList()
         randomList = emptyList()
-        
         if (rankSize > 0) {
             rankViewAdapter.updateData(rankList)
         }
