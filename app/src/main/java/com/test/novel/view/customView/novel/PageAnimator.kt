@@ -247,6 +247,32 @@ class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurn
     private val camera = Camera()
     private val matrix = Matrix()
 
+    override fun onLayout() {
+        super.onLayout()
+        val width = pageTurnView.width
+        val height = pageTurnView.height
+
+        // 上一页重叠初始位于当前页顶部
+        previousPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f  // 不要使用translationX，使用layout定位
+            elevation = 20f    // 最上层
+        }
+
+        // 当前页正常显示
+        currentPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f
+            elevation = 10f    // 中间层
+        }
+
+        // 下一页与当前页重叠，在底层
+        nextPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f
+            elevation = 5f     // 最下层
+        }
+    }
     override fun onFlipProgress(direction: Int, progress: Float, distance: Float) {
         val width = pageTurnView.width
 
@@ -361,10 +387,6 @@ class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurn
         nextPage?.rotationY = -90f
     }
 
-    override fun onLayout() {
-        super.onLayout()
-        pageTurnView.cameraDistance = pageTurnView.width * 10f
-    }
 }
 
 /**

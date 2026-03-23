@@ -2,6 +2,7 @@ package com.test.novel.view.newNovelPage
 
 import android.graphics.Canvas
 import android.os.Bundle
+import android.text.StaticLayout
 import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -16,12 +17,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.test.novel.databinding.FragmentCoverReadBinding
-import com.test.novel.databinding.FragmentPageBinding
 import com.test.novel.databinding.FragmentReadBinding
 import com.test.novel.model.vo.ReadingPageVo
 import com.test.novel.utils.SizeUtils.navigationBarHeight
 import com.test.novel.utils.SizeUtils.statusBarHeight
-import com.test.novel.view.customView.novel.PageProvider
 import com.test.novel.view.customView.novel.PageTurnListener
 import com.test.novel.view.customView.novel.PageTurnView
 import com.test.novel.view.customView.novel.ReadPageProvider
@@ -33,7 +32,7 @@ import kotlinx.coroutines.launch
 private const val CHAPTER_ID = "chapterId"
 @AndroidEntryPoint
 class ReadFragment : Fragment() {
-    private var _binding :FragmentReadBinding? = null
+    private var _binding : FragmentReadBinding? = null
     private val binding get() = _binding!!
     private lateinit var pageProvider: ReadPageProvider
     private lateinit var pageTurnView: PageTurnView
@@ -77,7 +76,6 @@ class ReadFragment : Fragment() {
         pageTurnView.pageProvider = pageProvider
         pageTurnView.pageListener = object : PageTurnListener{
             override fun onPageChanged(pageIndex: Int) {
-
             }
 
             override fun onCenterClick() {
@@ -118,7 +116,6 @@ class ReadFragment : Fragment() {
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
             )
             toolBinding.root.layout(0, 0, width, height)
-            toolBinding.root.draw(Canvas())
             val toolNovelText = toolBinding.novelText
             // 3. 作为工具使用
             toolNovelText.isDrawEnable = false
@@ -129,17 +126,22 @@ class ReadFragment : Fragment() {
             val pages = toolNovelText.getPages()
             val totalPages = pages.size
             Log.d("ReadFragment", "getPages() returned $totalPages pages")
+            val pageDataList = mutableListOf<ReadPageProvider.PageData>()
             pages.forEachIndexed { index, pageContent ->
                 // 创建PageData用于每一页
                 val pageData = ReadPageProvider.PageData(
                     content = pageContent,
                     pageIndex = index,
                     totalPages = totalPages,
+                    title = pageVo.chapterTitle,
                     pageType = ReadPageProvider.PageType.Cover
                 )
-                Log.d("ReadFragment", "Appending page $index, content length: ${pageContent.length}")
-                pageTurnView.appendPage(pageData,false)
+                Log.d("ReadFragment", "Adding page $index, content length: ${pageContent.length}")
+                pageDataList.add(pageData)
             }
+
+            // 批量添加页面
+            pageTurnView.appendPages(pageDataList, -1)
             Log.d("ReadFragment", "paginateText completed, total pages added: $totalPages")
         }
     }
@@ -189,6 +191,10 @@ class ReadFragment : Fragment() {
                 }
             }
         }
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
     }
 
     companion object {

@@ -14,7 +14,7 @@ data class ReadViewUiState(
 )
 sealed class ReadIntent{
     data object ShowOrHideBar: ReadIntent()
-    data object TurnPage: ReadIntent()
+    data class TurnPage(val pageIndex: Int): ReadIntent()
     data class LoadChapterWithId(val chapterId: Int):ReadIntent()
 }
 

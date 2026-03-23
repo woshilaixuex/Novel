@@ -1,9 +1,11 @@
 package com.test.novel.view.customView.novel
 
+import android.icu.text.CaseMap
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.appcompat.widget.DialogTitle
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.bumptech.glide.Glide
 import com.test.novel.databinding.FragmentBookBriefBinding
@@ -20,6 +22,7 @@ class ReadPageProvider : PageProvider {
     }
     data class PageData (
         val content: String,
+        val title: String,
         val pageIndex: Int,
         val totalPages: Int,
         val pageType: PageType = PageType.Cover
@@ -90,9 +93,10 @@ class ReadPageProvider : PageProvider {
             true
         )
         page.novelText.text = data.content
+        page.title.text = data.title
+        page.title.visibility = if (data.pageIndex == 0) View.VISIBLE else View.GONE
         Log.d("ReadPageProvider", "Text set to novelText, child count: ${pageViewGroup.childCount}")
     }
-
 
     override fun addPage(pageData: PageData): Int {
         Log.d("ReadPageProvider", "addPage called, pageData: $pageData, current size: ${pageDataList.size}")

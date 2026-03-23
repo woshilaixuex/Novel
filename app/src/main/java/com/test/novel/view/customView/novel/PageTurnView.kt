@@ -11,6 +11,13 @@ import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import com.test.novel.R
 import com.test.novel.view.customView.novel.ReadPageProvider.PageData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 class PageTurnView @JvmOverloads constructor(
@@ -18,6 +25,9 @@ class PageTurnView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    private val DEBOUNCE_DURATION = 250L
+    private var pageChangeJob: Job? = null
+    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
         private const val MOVE_THRESHOLD = 0.3f // 翻页阈值，超过屏幕宽度的30%自动完成翻页
@@ -285,7 +295,33 @@ class PageTurnView @JvmOverloads constructor(
     fun appendPage(pageContent: PageData, navigateToNewPage: Boolean = true): Boolean {
         return addPage(pageContent, navigateToNewPage) >= 0
     }
-
+    fun appendPages(pageContents:List<PageData>,navigateIndex: Int): Boolean {
+        return addPages(pageContents, navigateIndex) >= 0
+    }
+    /**
+     * 用于初始化对应数据，防止重复调用loadPage导致频繁绘制
+     * @param pageContents 所以页面内容
+     * @param navigateIndex 是否立即导航到的页面的索引 -1为不导航
+     * @return 此时page的长度
+     */
+    fun addPages(pageContents:List<PageData>,navigateIndex: Int) :Int{
+        val provider = pageProvider
+        if (provider !is PageProvider) {
+            Log.w("PageTurnView", "Current provider doesn't support dynamic page addition")
+            return -1
+        }
+        val newPageIndex = 0
+        for (content in pageContents) {
+            val newPageIndex = provider.addPage(content)
+        }
+        if (navigateIndex >= 0) {
+            goToPage(newPageIndex)
+        } else {
+            // 仅更新视图状态
+            notifyDataChanged()
+        }
+        return newPageIndex
+    }
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (pageProvider == null || animationInProgress) return super.onTouchEvent(event)
@@ -347,8 +383,12 @@ class PageTurnView @JvmOverloads constructor(
                     // 点击事件处理
                     val screenWidth = width.toFloat()
                     when {
-                        event.x < screenWidth / 3 -> goToPreviousPage() // 左1/3区域点击，上一页
-                        event.x > screenWidth * 2 / 3 -> goToNextPage() // 右1/3区域点击，下一页
+                        event.x < screenWidth / 3 -> {
+                            debouncePageChange { goToPreviousPage() }
+                        }
+                        event.x > screenWidth * 2 / 3 -> {
+                            debouncePageChange { goToNextPage() }
+                        }
                         else -> pageListener?.onCenterClick() // 中间区域点击
                     }
                     touchDown = false
@@ -404,7 +444,17 @@ class PageTurnView @JvmOverloads constructor(
         pageAnimator.onDraw(canvas)
         super.dispatchDraw(canvas)
     }
-
+    private fun debouncePageChange(action: () -> Unit) {
+        pageChangeJob?.cancel()
+        pageChangeJob = viewScope.launch {
+            delay(DEBOUNCE_DURATION)
+            action()
+        }
+    }
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        viewScope.cancel()
+    }
     // 获取页面视图
     fun getPreviousPage(): View? = previousPage
     fun getCurrentPage(): View? = currentPage

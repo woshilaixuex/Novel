@@ -40,11 +40,27 @@ class ReadViewModel @Inject constructor() : ViewModel() {
                 loadChapter(readIntent.chapterId)
             }
             is ReadIntent.TurnPage -> {
-
+                turnPage(readIntent.pageIndex)
             }
         }
 
     }
+
+    private fun turnPage(pageIndex: Int) {
+        if (_readState.value.readingPageVo == null){
+            return
+        }
+        if (pageIndex < 0) {
+
+        }
+        if (pageIndex > _readState.value.readingPageVo!!.totalIndex){
+
+        }
+        _readState.value = _readState.value.copy(
+
+        )
+    }
+
     fun loadChapter(chapterId: Int){
         Log.d("ReadViewModel", "loadChapter called with chapterId: $chapterId")
         viewModelScope.launch {
