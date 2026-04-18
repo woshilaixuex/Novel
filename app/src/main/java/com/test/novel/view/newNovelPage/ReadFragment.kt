@@ -1,8 +1,9 @@
 package com.test.novel.view.newNovelPage
 
-import android.graphics.Canvas
 import android.os.Bundle
+import android.text.Layout
 import android.text.StaticLayout
+import android.text.TextPaint
 import android.util.Log
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -28,8 +29,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.math.max
 
-private const val CHAPTER_ID = "chapterId"
 @AndroidEntryPoint
 class ReadFragment : Fragment() {
     private var _binding : FragmentReadBinding? = null
@@ -111,21 +112,14 @@ class ReadFragment : Fragment() {
             val height = pageTurnView.measuredHeight
             Log.d("ReadFragment", "pageTurnView dimensions: width=$width, height=$height")
 
-            toolBinding.root.measure(
-                View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY)
-            )
-            toolBinding.root.layout(0, 0, width, height)
-            val toolNovelText = toolBinding.novelText
-            // 3. 作为工具使用
-            toolNovelText.isDrawEnable = false
-            // 直接使用String类型的context
-            toolNovelText.text = pageVo.content
-            toolNovelText.draw(Canvas())
+            if (width <= 0 || height <= 0) {
+                Log.w("ReadFragment", "paginateText skipped because pageTurnView is not measured yet")
+                return@post
+            }
 
-            val pages = toolNovelText.getPages()
+            val pages = paginateWithStaticLayout(pageVo, width, height)
             val totalPages = pages.size
-            Log.d("ReadFragment", "getPages() returned $totalPages pages")
+            Log.d("ReadFragment", "StaticLayout returned $totalPages pages")
             val pageDataList = mutableListOf<ReadPageProvider.PageData>()
             pages.forEachIndexed { index, pageContent ->
                 // 创建PageData用于每一页
@@ -140,11 +134,105 @@ class ReadFragment : Fragment() {
                 pageDataList.add(pageData)
             }
 
-            // 批量添加页面
-            pageTurnView.appendPages(pageDataList, -1)
+            pageProvider.replacePages(pageDataList)
+            pageTurnView.resetPages()
             Log.d("ReadFragment", "paginateText completed, total pages added: $totalPages")
         }
     }
+
+    private fun paginateWithStaticLayout(
+        pageVo: ReadingPageVo,
+        pageWidth: Int,
+        pageHeight: Int
+    ): List<String> {
+        val content = pageVo.content
+        if (content.isEmpty()) {
+            return listOf("")
+        }
+
+        val firstPageSpec = createPageSpec(pageWidth, pageHeight, showTitle = true)
+        val normalPageSpec = createPageSpec(pageWidth, pageHeight, showTitle = false)
+        val pages = mutableListOf<String>()
+        var start = 0
+        var pageIndex = 0
+
+        while (start < content.length) {
+            val spec = if (pageIndex == 0) firstPageSpec else normalPageSpec
+            val end = calculatePageEnd(content, start, spec)
+            if (end <= start) {
+                val fallbackEnd = (start + 1).coerceAtMost(content.length)
+                pages.add(content.substring(start, fallbackEnd))
+                start = fallbackEnd
+            } else {
+                pages.add(content.substring(start, end))
+                start = end
+            }
+            pageIndex++
+        }
+
+        return pages
+    }
+
+    private fun createPageSpec(
+        pageWidth: Int,
+        pageHeight: Int,
+        showTitle: Boolean
+    ): StaticPageSpec {
+        toolBinding.title.visibility = if (showTitle) View.VISIBLE else View.GONE
+        toolBinding.root.measure(
+            View.MeasureSpec.makeMeasureSpec(pageWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(pageHeight, View.MeasureSpec.EXACTLY)
+        )
+        toolBinding.root.layout(0, 0, pageWidth, pageHeight)
+
+        val textView = toolBinding.novelText
+        val availableWidth =
+            (textView.measuredWidth - textView.paddingLeft - textView.paddingRight).coerceAtLeast(1)
+        val availableHeight =
+            (textView.measuredHeight - textView.paddingTop - textView.paddingBottom).coerceAtLeast(1)
+
+        return StaticPageSpec(
+            paint = TextPaint(textView.paint),
+            availableWidth = availableWidth,
+            availableHeight = availableHeight,
+            lineSpacingExtra = textView.lineSpacingExtra,
+            lineSpacingMultiplier = textView.lineSpacingMultiplier,
+            includeFontPadding = textView.includeFontPadding
+        )
+    }
+
+    private fun calculatePageEnd(
+        content: String,
+        start: Int,
+        spec: StaticPageSpec
+    ): Int {
+        val layout = StaticLayout.Builder
+            .obtain(content, start, content.length, spec.paint, spec.availableWidth)
+            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+            .setLineSpacing(spec.lineSpacingExtra, spec.lineSpacingMultiplier)
+            .setIncludePad(spec.includeFontPadding)
+            .build()
+
+        var lastVisibleLine = layout.getLineForVertical(max(spec.availableHeight - 1, 0))
+        while (lastVisibleLine >= 0 && layout.getLineBottom(lastVisibleLine) > spec.availableHeight) {
+            lastVisibleLine--
+        }
+
+        if (lastVisibleLine < 0) {
+            return start
+        }
+
+        return layout.getLineEnd(lastVisibleLine)
+    }
+
+    private data class StaticPageSpec(
+        val paint: TextPaint,
+        val availableWidth: Int,
+        val availableHeight: Int,
+        val lineSpacingExtra: Float,
+        val lineSpacingMultiplier: Float,
+        val includeFontPadding: Boolean
+    )
 
     private fun animateBars(show: Boolean) {
         val topBar = binding.topBar
@@ -198,7 +286,7 @@ class ReadFragment : Fragment() {
     }
 
     companion object {
-
+        const val CHAPTER_ID = "chapterId"
         @JvmStatic
         fun newInstance(chapterId: Int) = ReadFragment().apply {
                 arguments = Bundle().apply {

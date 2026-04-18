@@ -105,4 +105,9 @@ class ReadPageProvider : PageProvider {
         return pageDataList.size - 1
     }
 
+    fun replacePages(pages: List<PageData>) {
+        pageDataList.clear()
+        pageDataList.addAll(pages)
+    }
+
 }

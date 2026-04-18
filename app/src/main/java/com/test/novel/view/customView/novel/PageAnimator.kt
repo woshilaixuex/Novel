@@ -3,13 +3,14 @@ package com.test.novel.view.customView.novel
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
-import android.graphics.Camera
 import android.graphics.Canvas
-import android.graphics.Matrix
+import android.graphics.PointF
+import android.graphics.Rect
 import android.util.Log
 import android.view.View
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.Interpolator
+import kotlin.math.abs
 
 /**
  * 页面动画基础接口
@@ -244,99 +245,420 @@ class CoverPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurnView)
  */
 class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurnView) {
 
-    private val camera = Camera()
-    private val matrix = Matrix()
+    private val touchPoint = PointF() // 手指触摸位置
 
     override fun onLayout() {
         super.onLayout()
         val width = pageTurnView.width
         val height = pageTurnView.height
 
+        // 设置相机距离，增强3D效果
+        pageTurnView.cameraDistance = width * 10f
+
         // 上一页重叠初始位于当前页顶部
         previousPage?.apply {
             layout(0, 0, width, height)
-            translationX = 0f  // 不要使用translationX，使用layout定位
-            elevation = 20f    // 最上层
+            translationX = 0f
+            elevation = 20f
         }
 
         // 当前页正常显示
         currentPage?.apply {
             layout(0, 0, width, height)
             translationX = 0f
-            elevation = 10f    // 中间层
+            elevation = 10f
         }
 
         // 下一页与当前页重叠，在底层
         nextPage?.apply {
             layout(0, 0, width, height)
             translationX = 0f
-            elevation = 5f     // 最下层
+            elevation = 5f
         }
     }
-    override fun onFlipProgress(direction: Int, progress: Float, distance: Float) {
-        val width = pageTurnView.width
+
+    override fun onFlipStart(direction: Int) {
+        super.onFlipStart(direction)
+        val defaultX = if (direction > 0) 0f else pageTurnView.width.toFloat()
+        val fallbackY = pageTurnView.height / 2f
+        val touchY = pageTurnView.getLastTouchY().takeIf { it in 0f..pageTurnView.height.toFloat() } ?: fallbackY
+        val touchX = pageTurnView.getLastTouchX().takeIf { it in 0f..pageTurnView.width.toFloat() } ?: defaultX
+        touchPoint.set(touchX, touchY)
 
         if (direction > 0) {
-            // 向右翻，模拟书页右侧边缘旋转
-            currentPage?.let {
-                it.pivotX = 0f
-                it.pivotY = it.height / 2f
-                it.rotationY = -progress * 90
+            applyPreviousPageProgress(0f)
+        } else {
+            applyNextPageProgress(0f)
+        }
+    }
+
+    override fun onFlipProgress(direction: Int, progress: Float, distance: Float) {
+        if (direction > 0) {
+            touchPoint.x = (progress * pageTurnView.width).coerceIn(0f, pageTurnView.width.toFloat())
+            touchPoint.y = pageTurnView.getLastTouchY()
+                .takeIf { it in 0f..pageTurnView.height.toFloat() }
+                ?: (pageTurnView.height / 2f)
+            applyPreviousPageProgress(progress)
+        } else {
+            touchPoint.x = pageTurnView.getLastTouchX()
+                .takeIf { it in 0f..pageTurnView.width.toFloat() }
+                ?: (pageTurnView.width - progress * pageTurnView.width)
+            touchPoint.y = pageTurnView.getLastTouchY()
+                .takeIf { it in 0f..pageTurnView.height.toFloat() }
+                ?: (pageTurnView.height / 2f)
+            applyNextPageProgress(progress)
+        }
+    }
+
+    override fun onFlipEnd(direction: Int, completed: Boolean, callback: () -> Unit) {
+        val startProgress = if (direction > 0) {
+            ((previousPage?.clipBounds?.right ?: 0).toFloat() / pageTurnView.width).coerceIn(0f, 1f)
+        } else {
+            ((currentPage?.rotationY ?: 0f) / 72f).coerceIn(0f, 1f)
+        }
+        val endProgress = if (completed) 1f else 0f
+
+        super.clearAnimation()
+        previousPage?.animate()?.cancel()
+        currentPage?.animate()?.cancel()
+        nextPage?.animate()?.cancel()
+
+        animator = ValueAnimator.ofFloat(startProgress, endProgress).apply {
+            duration = if (completed) 260 else 180
+            interpolator = myInterpolator
+            addUpdateListener { animation ->
+                val value = animation.animatedValue as Float
+                if (direction > 0) {
+                    applyPreviousPageProgress(value)
+                } else {
+                    applyNextPageProgress(value)
+                }
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (!completed) {
+                        resetSimulationState()
+                    }
+                    callback()
+                }
+            })
+            start()
+        }
+    }
+
+    override fun flipNextPage(callback: () -> Unit) {
+        // 实现自动翻页动画
+        onFlipStart(-1)
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 300
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                onFlipProgress(-1, progress, -pageTurnView.width * progress)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    onFlipEnd(-1, true, callback)
+                }
+            })
+            start()
+        }
+    }
+
+    override fun flipPreviousPage(callback: () -> Unit) {
+        // 实现自动翻页动画
+        onFlipStart(1)
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 300
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                onFlipProgress(1, progress, pageTurnView.width * progress)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    onFlipEnd(1, true, callback)
+                }
+            })
+            start()
+        }
+    }
+
+    override fun onPageLoaded() {
+        super.onPageLoaded()
+        resetSimulationState()
+    }
+
+    override fun clearAnimation() {
+        super.clearAnimation()
+        previousPage?.animate()?.cancel()
+        currentPage?.animate()?.cancel()
+        nextPage?.animate()?.cancel()
+        resetSimulationState()
+    }
+
+    private fun applyPreviousPageProgress(rawProgress: Float) {
+        val progress = rawProgress.coerceIn(0f, 1f)
+        val width = pageTurnView.width
+        val height = pageTurnView.height
+        val revealWidth = (width * progress).toInt().coerceIn(0, width)
+
+        previousPage?.apply {
+            visibility = View.VISIBLE
+            pivotX = 0f
+            pivotY = height / 2f
+            rotation = 0f
+            rotationX = 0f
+            rotationY = 0f
+            translationX = 0f
+            translationY = 0f
+            translationZ = 120f * progress
+            alpha = 0.82f + 0.18f * progress
+            clipBounds = Rect(0, 0, revealWidth, height)
+        }
+
+        currentPage?.apply {
+            visibility = View.VISIBLE
+            rotation = 0f
+            rotationX = 0f
+            rotationY = 0f
+            pivotX = width.toFloat()
+            pivotY = height / 2f
+            translationX = width * 0.035f * progress
+            translationY = 0f
+            translationZ = -90f * progress
+            alpha = 1f - 0.12f * progress
+            clipBounds = Rect(revealWidth, 0, width, height)
+        }
+
+        nextPage?.apply {
+            visibility = View.INVISIBLE
+            alpha = 1f
+            clipBounds = Rect(width, 0, width, height)
+        }
+    }
+
+    private fun applyNextPageProgress(rawProgress: Float) {
+        val progress = rawProgress.coerceIn(0f, 1f)
+        val width = pageTurnView.width.toFloat()
+        val height = pageTurnView.height.toFloat()
+        val useTopCorner = touchPoint.y <= height / 2f
+        val cornerY = if (useTopCorner) 0f else height
+        val cornerSign = if (useTopCorner) -1f else 1f
+        val diagonalInfluence = (abs(touchPoint.y - cornerY) / height).coerceIn(0.15f, 1f)
+        val revealLeft = (width * (1f - progress * 0.94f)).toInt().coerceIn(0, width.toInt())
+
+        currentPage?.apply {
+            visibility = View.VISIBLE
+            pivotX = width
+            pivotY = cornerY
+            rotationY = 72f * progress
+            rotationX = cornerSign * 10f * diagonalInfluence * progress
+            rotation = cornerSign * (18f * diagonalInfluence) * progress
+            translationX = -width * 0.1f * progress
+            translationY = cornerSign * height * 0.045f * progress
+            translationZ = -160f * progress
+            scaleY = 1f - 0.05f * progress
+            alpha = 1f - 0.18f * progress
+            clipBounds = null
+        }
+
+        nextPage?.apply {
+            visibility = View.VISIBLE
+            pivotX = width
+            pivotY = cornerY
+            rotationY = -22f * (1f - progress)
+            rotationX = -cornerSign * 5f * (1f - progress)
+            rotation = -cornerSign * 8f * (1f - progress)
+            translationX = -width * 0.03f * (1f - progress)
+            translationY = cornerSign * height * 0.018f * (1f - progress)
+            translationZ = 90f * progress
+            scaleY = 0.985f + 0.015f * progress
+            alpha = 0.72f + 0.28f * progress
+            clipBounds = Rect(revealLeft, 0, width.toInt(), height.toInt())
+        }
+
+        previousPage?.apply {
+            visibility = View.INVISIBLE
+            clipBounds = Rect(0, 0, 0, height.toInt())
+        }
+    }
+
+    private fun resetSimulationState() {
+        val width = pageTurnView.width
+        val height = pageTurnView.height
+
+        previousPage?.apply {
+            rotation = 0f
+            rotationX = 0f
+            rotationY = 0f
+            translationX = 0f
+            translationY = 0f
+            translationZ = 0f
+            scaleX = 1f
+            scaleY = 1f
+            alpha = 1f
+            clipBounds = Rect(0, 0, 0, height)
+            visibility = View.INVISIBLE
+        }
+        currentPage?.apply {
+            rotation = 0f
+            rotationX = 0f
+            rotationY = 0f
+            translationX = 0f
+            translationY = 0f
+            translationZ = 0f
+            scaleX = 1f
+            scaleY = 1f
+            alpha = 1f
+            clipBounds = null
+            visibility = View.VISIBLE
+        }
+        nextPage?.apply {
+            rotation = 0f
+            rotationX = 0f
+            rotationY = 0f
+            translationX = 0f
+            translationY = 0f
+            translationZ = 0f
+            scaleX = 1f
+            scaleY = 1f
+            alpha = 1f
+            clipBounds = Rect(width, 0, width, height)
+            visibility = View.INVISIBLE
+        }
+    }
+}
+
+/**
+ * 逐行显示动画效果
+ * 从左往右一排一排像素让View从不可见到可见
+ */
+class LineByLinePageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurnView) {
+
+    private val touchPoint = PointF() // 手指触摸位置
+    private var lineHeight = 20f // 每行的高度
+
+    override fun onLayout() {
+        super.onLayout()
+        val width = pageTurnView.width
+        val height = pageTurnView.height
+
+        // 上一页与当前页重叠，初始时完全不可见（裁剪为0宽度）
+        previousPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f
+            elevation = 20f // 确保上一页在当前页之上
+            visibility = View.INVISIBLE
+            // 初始裁剪为0宽度
+            clipBounds = android.graphics.Rect(0, 0, 0, height)
+        }
+
+        // 当前页正常显示
+        currentPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f
+            elevation = 10f
+        }
+
+        // 下一页与当前页重叠，初始时完全不可见
+        nextPage?.apply {
+            layout(0, 0, width, height)
+            translationX = 0f
+            elevation = 5f
+            visibility = View.INVISIBLE
+            // 初始裁剪为0宽度（从右侧开始）
+            clipBounds = android.graphics.Rect(width, 0, width, height)
+        }
+    }
+
+    override fun onFlipStart(direction: Int) {
+        super.onFlipStart(direction)
+        // 初始化触摸点
+        touchPoint.set(if (direction > 0) 0f else pageTurnView.width.toFloat(), pageTurnView.height / 2f)
+
+        // 准备翻页时显示相应页面
+        if (direction > 0) {
+            // 向右翻，显示上一页
+            previousPage?.visibility = View.VISIBLE
+        } else {
+            // 向左翻，显示下一页
+            nextPage?.visibility = View.VISIBLE
+        }
+    }
+
+    override fun onFlipProgress(direction: Int, progress: Float, distance: Float) {
+        val width = pageTurnView.width
+        val height = pageTurnView.height
+
+        // 更新触摸点位置
+        if (direction > 0) {
+            touchPoint.x = progress * width
+        } else {
+            touchPoint.x = width - progress * width
+        }
+
+        if (direction > 0) {
+            // 向右翻，上一页从左往右逐渐显示（不移动位置）
+            previousPage?.let {
+                // 设置裁剪区域，实现从左往右逐渐显示效果
+                val clipWidth = (progress * width).toInt()
+                it.clipBounds = android.graphics.Rect(0, 0, clipWidth, height)
             }
 
-            previousPage?.let {
-                it.pivotX = width.toFloat()
-                it.pivotY = it.height / 2f
-                it.rotationY = 90 - progress * 90
-                it.visibility = View.VISIBLE
+            currentPage?.let {
+                // 当前页稍微变暗，增强层次感
+                it.alpha = 1f - progress * 0.3f
             }
         } else {
-            // 向左翻，模拟书页左侧边缘旋转
-            currentPage?.let {
-                it.pivotX = width.toFloat()
-                it.pivotY = it.height / 2f
-                it.rotationY = progress * 90
+            // 向左翻，下一页从右往左逐渐显示（不移动位置）
+            nextPage?.let {
+                // 设置裁剪区域，实现从右往左逐渐显示效果
+                val clipWidth = (progress * width).toInt()
+                it.clipBounds = android.graphics.Rect(width - clipWidth, 0, width, height)
             }
 
-            nextPage?.let {
-                it.pivotX = 0f
-                it.pivotY = it.height / 2f
-                it.rotationY = -90 + progress * 90
-                it.visibility = View.VISIBLE
+            currentPage?.let {
+                // 当前页稍微变暗，增强层次感
+                it.alpha = 1f - progress * 0.3f
             }
         }
     }
 
     override fun onFlipEnd(direction: Int, completed: Boolean, callback: () -> Unit) {
-        val width = pageTurnView.width
-
         if (completed) {
             // 翻页完成
             if (direction > 0) {
                 // 向右翻到上一页
                 currentPage?.animate()
-                    ?.rotationY(-180f)
+                    ?.alpha(0f)
                     ?.setDuration(200)
                     ?.withEndAction {
+                        // 清除裁剪区域
+                        previousPage?.clipBounds = null
+                        currentPage?.alpha = 1f
                         callback()
                     }
                     ?.start()
 
                 previousPage?.animate()
-                    ?.rotationY(0f)
+                    ?.alpha(1f)
                     ?.setDuration(200)
                     ?.start()
             } else {
                 // 向左翻到下一页
                 currentPage?.animate()
-                    ?.rotationY(180f)
+                    ?.alpha(0f)
                     ?.setDuration(200)
                     ?.start()
 
                 nextPage?.animate()
-                    ?.rotationY(0f)
+                    ?.alpha(1f)
                     ?.setDuration(200)
                     ?.withEndAction {
+                        // 清除裁剪区域
+                        nextPage?.clipBounds = null
+                        currentPage?.alpha = 1f
                         callback()
                     }
                     ?.start()
@@ -344,25 +666,27 @@ class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurn
         } else {
             // 取消翻页，恢复原状
             currentPage?.animate()
-                ?.rotationY(0f)
+                ?.alpha(1f)
                 ?.setDuration(200)
                 ?.start()
 
             if (direction > 0) {
                 previousPage?.animate()
-                    ?.rotationY(90f)
+                    ?.alpha(0f)
                     ?.setDuration(200)
                     ?.withEndAction {
                         previousPage?.visibility = View.INVISIBLE
+                        previousPage?.clipBounds = android.graphics.Rect(0, 0, 0, pageTurnView.height)
                         callback()
                     }
                     ?.start()
             } else {
                 nextPage?.animate()
-                    ?.rotationY(-90f)
+                    ?.alpha(0f)
                     ?.setDuration(200)
                     ?.withEndAction {
                         nextPage?.visibility = View.INVISIBLE
+                        nextPage?.clipBounds = android.graphics.Rect(pageTurnView.width, 0, pageTurnView.width, pageTurnView.height)
                         callback()
                     }
                     ?.start()
@@ -371,22 +695,73 @@ class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurn
     }
 
     override fun flipNextPage(callback: () -> Unit) {
-        TODO("Not yet implemented")
+        // 实现自动翻页动画
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 500
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                onFlipProgress(-1, progress, -pageTurnView.width * progress)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    onFlipEnd(-1, true, callback)
+                }
+            })
+            start()
+        }
     }
 
     override fun flipPreviousPage(callback: () -> Unit) {
-        TODO("Not yet implemented")
+        // 实现自动翻页动画
+        animator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 500
+            interpolator = AccelerateDecelerateInterpolator()
+            addUpdateListener { animation ->
+                val progress = animation.animatedValue as Float
+                onFlipProgress(1, progress, pageTurnView.width * progress)
+            }
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    onFlipEnd(1, true, callback)
+                }
+            })
+            start()
+        }
     }
 
     override fun onPageLoaded() {
         super.onPageLoaded()
+        val height = pageTurnView.height
+        val width = pageTurnView.width
 
-        // 重置3D变换
-        previousPage?.rotationY = 90f
-        currentPage?.rotationY = 0f
-        nextPage?.rotationY = -90f
+        // 重置状态
+        previousPage?.apply {
+            translationX = 0f
+            alpha = 1f
+            visibility = View.INVISIBLE
+            // 重置裁剪区域
+            clipBounds = android.graphics.Rect(0, 0, 0, height)
+        }
+        currentPage?.apply {
+            translationX = 0f
+            alpha = 1f
+        }
+        nextPage?.apply {
+            translationX = 0f
+            alpha = 1f
+            visibility = View.INVISIBLE
+            // 重置裁剪区域
+            clipBounds = android.graphics.Rect(width, 0, width, height)
+        }
     }
 
+    override fun clearAnimation() {
+        super.clearAnimation()
+        previousPage?.animate()?.cancel()
+        currentPage?.animate()?.cancel()
+        nextPage?.animate()?.cancel()
+    }
 }
 
 /**

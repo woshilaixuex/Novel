@@ -42,7 +42,7 @@ class PageTurnView @JvmOverloads constructor(
 
 
     // 当前的翻页动画类型
-    var animationType = PageAnimationType.COVER
+    var animationType = PageAnimationType.SIMULATION
         set(value) {
             if (field != value) {
                 field = value
@@ -81,6 +81,8 @@ class PageTurnView @JvmOverloads constructor(
     private var startX: Float = 0f
     private var startY: Float = 0f
     private var lastX: Float = 0f
+    private var lastTouchX: Float = 0f
+    private var lastTouchY: Float = 0f
     private var touchDown = false
     private var isFlipping = false
     private var isClick = 0
@@ -100,7 +102,7 @@ class PageTurnView @JvmOverloads constructor(
             0, 0
         ).apply {
             try {
-                val type = getInteger(R.styleable.PageTurnView_animationType, 0)
+                val type = getInteger(R.styleable.PageTurnView_animationType, 1)
                 animationType = PageAnimationType.entries.toTypedArray()[type]
             } finally {
                 recycle()
@@ -335,6 +337,8 @@ class PageTurnView @JvmOverloads constructor(
                 startX = event.x
                 startY = event.y
                 lastX = startX
+                lastTouchX = event.x
+                lastTouchY = event.y
                 touchDown = true
                 isClick = 0
                 return true
@@ -369,6 +373,8 @@ class PageTurnView @JvmOverloads constructor(
                 // 如果正在翻页，更新翻页进度
                 if (isFlipping) {
                     moveDistance = totalDeltaX
+                    lastTouchX = event.x
+                    lastTouchY = event.y
                     val progress = abs(moveDistance) / width
                     pageAnimator.onFlipProgress(moveDirection, progress, moveDistance)
                     invalidate()
@@ -459,5 +465,6 @@ class PageTurnView @JvmOverloads constructor(
     fun getPreviousPage(): View? = previousPage
     fun getCurrentPage(): View? = currentPage
     fun getNextPage(): View? = nextPage
+    fun getLastTouchX(): Float = lastTouchX
+    fun getLastTouchY(): Float = lastTouchY
 }
-
