@@ -258,7 +258,7 @@ object BookDataMaker{
     }
 
     fun generateMockChapters(): List<ChapterDto> {
-        return listOf(
+        val baseChapters = listOf(
             ChapterDto(
                 chapterId = "chapter_001",
                 bookId = "1001",
@@ -338,13 +338,74 @@ object BookDataMaker{
                 isVip = true
             )
         )
+
+        val amplifiedChapters = baseChapters.map { chapter ->
+            val amplifiedContent = amplifyChapterContent(chapter.title, chapter.content, repeatCount = 3)
+            chapter.copy(
+                content = amplifiedContent,
+                wordCount = amplifiedContent.length
+            )
+        }
+
+        val extraChapters = (4..12).map { createSyntheticChapter(it) }
+        return amplifiedChapters + extraChapters
     }
 
     fun generateMockChapter(index: Int): ChapterDto {
-        val chapter = generateMockChapters()
-        if (index < 0 || index >= chapter.size) {
+        val chapters = generateMockChapters()
+        if (chapters.isEmpty()) {
             return ChapterDto()
         }
-        return chapter[index]
+        if (index < 0) {
+            return chapters.first()
+        }
+        if (index >= chapters.size) {
+            return createSyntheticChapter(index + 1)
+        }
+        return chapters[index]
+    }
+
+    private fun amplifyChapterContent(
+        chapterTitle: String,
+        baseContent: String,
+        repeatCount: Int
+    ): String {
+        val continuationParagraphs = (1..repeatCount).joinToString("\n\n") { round ->
+            "$chapterTitle 的第 $round 轮补充段落中，人物关系、环境细节和心理活动被进一步展开。" +
+                "主角在压力与机遇之间反复权衡，每一次选择都会引出新的冲突与线索。" +
+                "为了方便测试分页与翻页效果，这里刻意保留了较长的连续正文，以及逗号、句号、引号等中文标点，" +
+                "让排版边界更容易暴露。"
+        }
+        return "$baseContent\n\n$continuationParagraphs"
+    }
+
+    private fun createSyntheticChapter(chapterNumber: Int): ChapterDto {
+        val chapterTitle = "第${chapterNumber}章 试炼继续"
+        val content = buildString {
+            append("$chapterTitle\n\n")
+            repeat(18) { section ->
+                append(
+                    "第${chapterNumber}章的第${section + 1}段测试正文开始了。主角沿着山道继续前行，" +
+                        "一路上既要提防暗处的危险，也要整理之前章节留下的线索。"
+                )
+                append("\n\n")
+                append(
+                    "为了测试阅读器在长文本场景下的分页稳定性，这里加入了更密集的叙述、对话和中文标点。" +
+                        "如果分页算法与真实渲染不一致，就容易在这种连续正文里出现吞字、留白或翻页边界不自然的问题。"
+                )
+                append("\n\n")
+            }
+        }
+
+        return ChapterDto(
+            chapterId = "chapter_${chapterNumber.toString().padStart(3, '0')}",
+            bookId = "1001",
+            title = chapterTitle,
+            content = content,
+            index = chapterNumber,
+            wordCount = content.length,
+            updateTime = "2024-01-15 12:${(chapterNumber + 10).toString().padStart(2, '0')}:00",
+            isVip = chapterNumber >= 8
+        )
     }
 }

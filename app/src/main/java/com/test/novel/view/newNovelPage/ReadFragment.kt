@@ -1,8 +1,6 @@
 package com.test.novel.view.newNovelPage
 
 import android.os.Bundle
-import android.text.Layout
-import android.text.StaticLayout
 import android.text.TextPaint
 import android.util.Log
 import androidx.fragment.app.Fragment
@@ -17,7 +15,7 @@ import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.test.novel.databinding.FragmentCoverReadBinding
+import com.test.novel.databinding.ReadPageTempBinding
 import com.test.novel.databinding.FragmentReadBinding
 import com.test.novel.model.vo.ReadingPageVo
 import com.test.novel.utils.SizeUtils.navigationBarHeight
@@ -26,10 +24,12 @@ import com.test.novel.view.customView.novel.PageTurnListener
 import com.test.novel.view.customView.novel.PageTurnView
 import com.test.novel.view.customView.novel.ReadPageProvider
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
-import kotlin.math.max
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class ReadFragment : Fragment() {
@@ -38,10 +38,11 @@ class ReadFragment : Fragment() {
     private lateinit var pageProvider: ReadPageProvider
     private lateinit var pageTurnView: PageTurnView
     private val viewModel: ReadViewModel by viewModels()
-    private lateinit var toolBinding: FragmentCoverReadBinding
+    private lateinit var toolBinding: ReadPageTempBinding
+    private var paginateJob: Job? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        toolBinding = FragmentCoverReadBinding.inflate(
+        toolBinding = ReadPageTempBinding.inflate(
             LayoutInflater.from(requireContext().applicationContext),
             null,
             false
@@ -58,7 +59,7 @@ class ReadFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        toolBinding = FragmentCoverReadBinding.inflate(layoutInflater)
+        toolBinding = ReadPageTempBinding.inflate(layoutInflater)
         // 根据章节加载数据
         var chapterId = 0
         arguments?.let {
@@ -117,67 +118,50 @@ class ReadFragment : Fragment() {
                 return@post
             }
 
-            val pages = paginateWithStaticLayout(pageVo, width, height)
-            val totalPages = pages.size
-            Log.d("ReadFragment", "StaticLayout returned $totalPages pages")
-            val pageDataList = mutableListOf<ReadPageProvider.PageData>()
-            pages.forEachIndexed { index, pageContent ->
-                // 创建PageData用于每一页
-                val pageData = ReadPageProvider.PageData(
-                    content = pageContent,
-                    pageIndex = index,
-                    totalPages = totalPages,
-                    title = pageVo.chapterTitle,
-                    pageType = ReadPageProvider.PageType.Cover
-                )
-                Log.d("ReadFragment", "Adding page $index, content length: ${pageContent.length}")
-                pageDataList.add(pageData)
-            }
+            val paginationStyle = buildPaginationStyle(width, height)
+            paginateJob?.cancel()
+            paginateJob = viewLifecycleOwner.lifecycleScope.launch {
+                val pageDataList = withContext(Dispatchers.Default) {
+                    ReadPagePaginator.paginate(
+                        content = pageVo.content,
+                        chapterTitle = pageVo.chapterTitle,
+                        style = paginationStyle
+                    )
+                }
+                Log.d("ReadFragment", "StaticLayout returned ${pageDataList.size} pages")
 
-            pageProvider.replacePages(pageDataList)
-            pageTurnView.resetPages()
-            Log.d("ReadFragment", "paginateText completed, total pages added: $totalPages")
+                if (_binding == null) return@launch
+                pageProvider.replacePages(pageDataList)
+                pageTurnView.resetPages()
+                Log.d("ReadFragment", "paginateText completed, total pages added: ${pageDataList.size}")
+            }
         }
     }
 
-    private fun paginateWithStaticLayout(
-        pageVo: ReadingPageVo,
+    private fun buildPaginationStyle(
         pageWidth: Int,
         pageHeight: Int
-    ): List<String> {
-        val content = pageVo.content
-        if (content.isEmpty()) {
-            return listOf("")
-        }
+    ): ReadPagePaginator.PaginationStyle {
+        val firstPageMetrics = measureTextArea(pageWidth, pageHeight, showTitle = true)
+        val normalPageMetrics = measureTextArea(pageWidth, pageHeight, showTitle = false)
+        val textView = toolBinding.novelText
 
-        val firstPageSpec = createPageSpec(pageWidth, pageHeight, showTitle = true)
-        val normalPageSpec = createPageSpec(pageWidth, pageHeight, showTitle = false)
-        val pages = mutableListOf<String>()
-        var start = 0
-        var pageIndex = 0
-
-        while (start < content.length) {
-            val spec = if (pageIndex == 0) firstPageSpec else normalPageSpec
-            val end = calculatePageEnd(content, start, spec)
-            if (end <= start) {
-                val fallbackEnd = (start + 1).coerceAtMost(content.length)
-                pages.add(content.substring(start, fallbackEnd))
-                start = fallbackEnd
-            } else {
-                pages.add(content.substring(start, end))
-                start = end
-            }
-            pageIndex++
-        }
-
-        return pages
+        return ReadPagePaginator.PaginationStyle(
+            paint = TextPaint(textView.paint),
+            availableWidth = firstPageMetrics.availableWidth,
+            firstPageAvailableHeight = firstPageMetrics.availableHeight,
+            normalPageAvailableHeight = normalPageMetrics.availableHeight,
+            lineSpacingExtra = textView.lineSpacingExtra,
+            lineSpacingMultiplier = textView.lineSpacingMultiplier,
+            includeFontPadding = textView.includeFontPadding
+        )
     }
 
-    private fun createPageSpec(
+    private fun measureTextArea(
         pageWidth: Int,
         pageHeight: Int,
         showTitle: Boolean
-    ): StaticPageSpec {
+    ): TextAreaMetrics {
         toolBinding.title.visibility = if (showTitle) View.VISIBLE else View.GONE
         toolBinding.root.measure(
             View.MeasureSpec.makeMeasureSpec(pageWidth, View.MeasureSpec.EXACTLY),
@@ -186,52 +170,15 @@ class ReadFragment : Fragment() {
         toolBinding.root.layout(0, 0, pageWidth, pageHeight)
 
         val textView = toolBinding.novelText
-        val availableWidth =
-            (textView.measuredWidth - textView.paddingLeft - textView.paddingRight).coerceAtLeast(1)
-        val availableHeight =
-            (textView.measuredHeight - textView.paddingTop - textView.paddingBottom).coerceAtLeast(1)
-
-        return StaticPageSpec(
-            paint = TextPaint(textView.paint),
-            availableWidth = availableWidth,
-            availableHeight = availableHeight,
-            lineSpacingExtra = textView.lineSpacingExtra,
-            lineSpacingMultiplier = textView.lineSpacingMultiplier,
-            includeFontPadding = textView.includeFontPadding
+        return TextAreaMetrics(
+            availableWidth = (textView.measuredWidth - textView.paddingLeft - textView.paddingRight).coerceAtLeast(1),
+            availableHeight = (textView.measuredHeight - textView.paddingTop - textView.paddingBottom).coerceAtLeast(1)
         )
     }
 
-    private fun calculatePageEnd(
-        content: String,
-        start: Int,
-        spec: StaticPageSpec
-    ): Int {
-        val layout = StaticLayout.Builder
-            .obtain(content, start, content.length, spec.paint, spec.availableWidth)
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setLineSpacing(spec.lineSpacingExtra, spec.lineSpacingMultiplier)
-            .setIncludePad(spec.includeFontPadding)
-            .build()
-
-        var lastVisibleLine = layout.getLineForVertical(max(spec.availableHeight - 1, 0))
-        while (lastVisibleLine >= 0 && layout.getLineBottom(lastVisibleLine) > spec.availableHeight) {
-            lastVisibleLine--
-        }
-
-        if (lastVisibleLine < 0) {
-            return start
-        }
-
-        return layout.getLineEnd(lastVisibleLine)
-    }
-
-    private data class StaticPageSpec(
-        val paint: TextPaint,
+    private data class TextAreaMetrics(
         val availableWidth: Int,
-        val availableHeight: Int,
-        val lineSpacingExtra: Float,
-        val lineSpacingMultiplier: Float,
-        val includeFontPadding: Boolean
+        val availableHeight: Int
     )
 
     private fun animateBars(show: Boolean) {
@@ -282,6 +229,8 @@ class ReadFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        paginateJob?.cancel()
+        paginateJob = null
         super.onDestroyView()
     }
 

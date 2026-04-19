@@ -285,6 +285,9 @@ class SimulationPageAnimator(pageTurnView: PageTurnView) : PageAnimator(pageTurn
     private var frontBitmap: Bitmap? = null
     private var underBitmap: Bitmap? = null
 
+    private var bottomTrans: Boolean = false
+    private var topTrans: Boolean = false
+
     override fun onLayout() {
         super.onLayout()
         val width = pageTurnView.width

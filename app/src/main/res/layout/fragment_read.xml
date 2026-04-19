@@ -26,13 +26,19 @@
             android:src="@drawable/back" />
     </LinearLayout>
 
-
-    <com.test.novel.view.customView.novel.PageTurnView
-        android:id="@+id/page"
+    <FrameLayout
+        android:id="@+id/readView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:animationType="simulation"/>
+        android:background="#e3dbd3"
+        >
 
+        <com.test.novel.view.customView.novel.PageTurnView
+            android:id="@+id/page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:animationType="cover"/>
+    </FrameLayout>
 
 
 

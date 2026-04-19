@@ -46,7 +46,9 @@ class PageTurnView @JvmOverloads constructor(
         set(value) {
             if (field != value) {
                 field = value
-                pageAnimator.clearAnimation()
+                if (::pageAnimator.isInitialized) {
+                    pageAnimator.clearAnimation()
+                }
                 pageAnimator = createAnimator(value)
                 requestLayout()
             }
@@ -70,7 +72,7 @@ class PageTurnView @JvmOverloads constructor(
     private val pageFactory = PageFactory(context)
 
     // 页面动画器
-    private var pageAnimator: PageAnimator
+    private lateinit var pageAnimator: PageAnimator
 
     // 三个页面视图
     private var previousPage: View? = null
@@ -95,6 +97,9 @@ class PageTurnView @JvmOverloads constructor(
 
 
     init {
+        // 先准备一个默认动画器，避免 XML 属性在构造期回调 setter 时访问空引用。
+        pageAnimator = createAnimator(animationType)
+
         // 初始化
         context.theme.obtainStyledAttributes(
             attrs,
@@ -108,9 +113,6 @@ class PageTurnView @JvmOverloads constructor(
                 recycle()
             }
         }
-
-        // 创建默认动画器
-        pageAnimator = createAnimator(animationType)
 
         // 设置默认背景，可通过主题修改
         setBackgroundColor(0xFFFAF9F6.toInt()) // 淡米色，模拟纸张

@@ -213,7 +213,6 @@ class NewNovelTextView @JvmOverloads constructor(
                 pageMaxLines = lineTexts.size
                 break
             }
-
         }
     }
 

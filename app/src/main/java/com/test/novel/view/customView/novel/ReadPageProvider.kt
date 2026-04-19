@@ -9,8 +9,8 @@ import androidx.appcompat.widget.DialogTitle
 import androidx.constraintlayout.widget.ConstraintLayout
 import com.bumptech.glide.Glide
 import com.test.novel.databinding.FragmentBookBriefBinding
-import com.test.novel.databinding.FragmentCoverReadBinding
 import com.test.novel.databinding.FragmentPageBinding
+import com.test.novel.databinding.ReadPageTempBinding
 import com.test.novel.model.vo.ReadingPageVo
 
 class ReadPageProvider : PageProvider {
@@ -87,7 +87,7 @@ class ReadPageProvider : PageProvider {
         Log.d("ReadPageProvider", "bindCoverPage called, pageView: $pageView, content: ${data.content}")
         val pageViewGroup = pageView as ViewGroup
         pageViewGroup.removeAllViews()
-        val page = FragmentCoverReadBinding.inflate(
+        val page = ReadPageTempBinding.inflate(
             LayoutInflater.from(pageView.context),
             pageViewGroup,
             true
