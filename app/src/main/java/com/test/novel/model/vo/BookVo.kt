@@ -44,20 +44,10 @@ data class ChapterVo(
 @SuppressLint("ParcelCreator")
 @Parcelize
 data class ReadingPageVo(
+    val chapterId: String, // 章节id
     val chapterTitle: String, // 章节名
-    val context: NovelContext = NovelContext.Empty
-) : Parcelable
-
-@Parcelize
-sealed class NovelContext : Parcelable {
-    @SuppressLint("ParcelCreator")
-    @Parcelize
-    data class Default(
-        val pageIndex: Int,
-        val totalIndex: Int,
-        val context: String
-    ) : NovelContext()
-    @SuppressLint("ParcelCreator")
-    @Parcelize
-    object Empty : NovelContext()
+    val pageIndex: Int,
+    val totalIndex: Int,
+    val content: String
+) : Parcelable{
 }

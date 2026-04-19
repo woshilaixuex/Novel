@@ -1,13 +1,13 @@
 package com.test.novel.model.dto
 
-import com.test.novel.view.introductionPage.IntroductionIntent
-import kotlinx.parcelize.Parcelize
+import android.annotation.SuppressLint
 import kotlinx.serialization.Serializable
 
 /**
  * 网络API响应的书籍数据传输对象
  * 对应后端API返回的数据结构
  */
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class BookDto(
     val bookId: String,
@@ -26,23 +26,15 @@ data class BookDto(
 /**
  * 网络API响应的章节数据传输对象
  */
+@SuppressLint("UnsafeOptInUsageError")
 @Serializable
 data class ChapterDto(
-    val chapterId: String,
-    val bookId: String,
-    val title: String,
-    val content: String,
-    val index: Int,
-    val wordCount: Int,
-    val updateTime: String,
-    val isVip: Boolean = false
-)
-/**
- * 网络API响应的具体内容数据传输对象
- */
-@Serializable
-data class DeFaultParagraphDto(
-    val pageIndex: Int,
-    val totalIndex: Int,
-    val context: String
+    val chapterId: String = "id",
+    val bookId: String = "",
+    val title: String = "",
+    val content: String = "",
+    val index: Int = 0,
+    val wordCount: Int = 0,
+    val updateTime: String = "",
+    val isVip: Boolean = false,
 )

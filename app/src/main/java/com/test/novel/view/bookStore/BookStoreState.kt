@@ -31,6 +31,7 @@ sealed class BookStoreIntent{
     data object Search:BookStoreIntent()
 
     data object InitData:BookStoreIntent()
+    data object ClearData: BookStoreIntent()
 }
 
 

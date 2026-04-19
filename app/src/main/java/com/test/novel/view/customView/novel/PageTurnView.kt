@@ -10,6 +10,14 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import com.test.novel.R
+import com.test.novel.view.customView.novel.ReadPageProvider.PageData
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 class PageTurnView @JvmOverloads constructor(
@@ -17,6 +25,9 @@ class PageTurnView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : FrameLayout(context, attrs, defStyleAttr) {
+    private val DEBOUNCE_DURATION = 250L
+    private var pageChangeJob: Job? = null
+    private val viewScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
     companion object {
         private const val MOVE_THRESHOLD = 0.3f // 翻页阈值，超过屏幕宽度的30%自动完成翻页
@@ -31,11 +42,13 @@ class PageTurnView @JvmOverloads constructor(
 
 
     // 当前的翻页动画类型
-    var animationType = PageAnimationType.COVER
+    var animationType = PageAnimationType.SIMULATION
         set(value) {
             if (field != value) {
                 field = value
-                pageAnimator.clearAnimation()
+                if (::pageAnimator.isInitialized) {
+                    pageAnimator.clearAnimation()
+                }
                 pageAnimator = createAnimator(value)
                 requestLayout()
             }
@@ -59,7 +72,7 @@ class PageTurnView @JvmOverloads constructor(
     private val pageFactory = PageFactory(context)
 
     // 页面动画器
-    private var pageAnimator: PageAnimator
+    private lateinit var pageAnimator: PageAnimator
 
     // 三个页面视图
     private var previousPage: View? = null
@@ -70,6 +83,8 @@ class PageTurnView @JvmOverloads constructor(
     private var startX: Float = 0f
     private var startY: Float = 0f
     private var lastX: Float = 0f
+    private var lastTouchX: Float = 0f
+    private var lastTouchY: Float = 0f
     private var touchDown = false
     private var isFlipping = false
     private var isClick = 0
@@ -82,6 +97,9 @@ class PageTurnView @JvmOverloads constructor(
 
 
     init {
+        // 先准备一个默认动画器，避免 XML 属性在构造期回调 setter 时访问空引用。
+        pageAnimator = createAnimator(animationType)
+
         // 初始化
         context.theme.obtainStyledAttributes(
             attrs,
@@ -89,15 +107,12 @@ class PageTurnView @JvmOverloads constructor(
             0, 0
         ).apply {
             try {
-                val type = getInteger(R.styleable.PageTurnView_animationType, 0)
+                val type = getInteger(R.styleable.PageTurnView_animationType, 1)
                 animationType = PageAnimationType.entries.toTypedArray()[type]
             } finally {
                 recycle()
             }
         }
-
-        // 创建默认动画器
-        pageAnimator = createAnimator(animationType)
 
         // 设置默认背景，可通过主题修改
         setBackgroundColor(0xFFFAF9F6.toInt()) // 淡米色，模拟纸张
@@ -136,7 +151,9 @@ class PageTurnView @JvmOverloads constructor(
      */
     private fun loadPages() {
         val provider = pageProvider ?: return
-        if (provider.getPageCount() == 0)
+        val pageCount = provider.getPageCount()
+        Log.d("PageTurnView", "loadPages() called, pageCount: $pageCount, currentPageIndex: $currentPageIndex")
+        if (pageCount == 0)
             return
         // 防止越界
         if (currentPageIndex < 0) currentPageIndex = 0
@@ -150,6 +167,7 @@ class PageTurnView @JvmOverloads constructor(
 
         // 加载当前页
         currentPage = pageFactory.createPageView().apply {
+            Log.d("PageTurnView", "Binding page at index: $currentPageIndex")
             provider.bindPage(this, currentPageIndex)
         }
         addView(currentPage)
@@ -243,8 +261,9 @@ class PageTurnView @JvmOverloads constructor(
      * @param navigateToNewPage 是否立即导航到新添加的页面
      * @return 新页面的索引，如果添加失败则返回-1
      */
-    fun addPage(pageContent: PageType, navigateToNewPage: Boolean = true): Int {
+    fun addPage(pageContent: PageData, navigateToNewPage: Boolean = true): Int {
         val provider = pageProvider
+        Log.d("PageTurnView", "addPage called, provider: $provider, pageContent: $pageContent")
 
         // 检查Provider是否支持动态添加页面
         if (provider !is PageProvider) {
@@ -254,6 +273,7 @@ class PageTurnView @JvmOverloads constructor(
 
         // 调用提供者添加页面
         val newPageIndex = provider.addPage(pageContent)
+        Log.d("PageTurnView", "addPage result: newPageIndex=$newPageIndex, navigateToNewPage=$navigateToNewPage")
 
         if (newPageIndex >= 0) {
             if (navigateToNewPage) {
@@ -276,10 +296,36 @@ class PageTurnView @JvmOverloads constructor(
      * @param navigateToNewPage 是否立即导航到新添加的页面
      * @return 是否添加成功
      */
-    fun appendPage(pageContent: PageType, navigateToNewPage: Boolean = true): Boolean {
+    fun appendPage(pageContent: PageData, navigateToNewPage: Boolean = true): Boolean {
         return addPage(pageContent, navigateToNewPage) >= 0
     }
-
+    fun appendPages(pageContents:List<PageData>,navigateIndex: Int): Boolean {
+        return addPages(pageContents, navigateIndex) >= 0
+    }
+    /**
+     * 用于初始化对应数据，防止重复调用loadPage导致频繁绘制
+     * @param pageContents 所以页面内容
+     * @param navigateIndex 是否立即导航到的页面的索引 -1为不导航
+     * @return 此时page的长度
+     */
+    fun addPages(pageContents:List<PageData>,navigateIndex: Int) :Int{
+        val provider = pageProvider
+        if (provider !is PageProvider) {
+            Log.w("PageTurnView", "Current provider doesn't support dynamic page addition")
+            return -1
+        }
+        val newPageIndex = 0
+        for (content in pageContents) {
+            val newPageIndex = provider.addPage(content)
+        }
+        if (navigateIndex >= 0) {
+            goToPage(newPageIndex)
+        } else {
+            // 仅更新视图状态
+            notifyDataChanged()
+        }
+        return newPageIndex
+    }
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         if (pageProvider == null || animationInProgress) return super.onTouchEvent(event)
@@ -293,6 +339,8 @@ class PageTurnView @JvmOverloads constructor(
                 startX = event.x
                 startY = event.y
                 lastX = startX
+                lastTouchX = event.x
+                lastTouchY = event.y
                 touchDown = true
                 isClick = 0
                 return true
@@ -327,6 +375,8 @@ class PageTurnView @JvmOverloads constructor(
                 // 如果正在翻页，更新翻页进度
                 if (isFlipping) {
                     moveDistance = totalDeltaX
+                    lastTouchX = event.x
+                    lastTouchY = event.y
                     val progress = abs(moveDistance) / width
                     pageAnimator.onFlipProgress(moveDirection, progress, moveDistance)
                     invalidate()
@@ -341,8 +391,12 @@ class PageTurnView @JvmOverloads constructor(
                     // 点击事件处理
                     val screenWidth = width.toFloat()
                     when {
-                        event.x < screenWidth / 3 -> goToPreviousPage() // 左1/3区域点击，上一页
-                        event.x > screenWidth * 2 / 3 -> goToNextPage() // 右1/3区域点击，下一页
+                        event.x < screenWidth / 3 -> {
+                            debouncePageChange { goToPreviousPage() }
+                        }
+                        event.x > screenWidth * 2 / 3 -> {
+                            debouncePageChange { goToNextPage() }
+                        }
                         else -> pageListener?.onCenterClick() // 中间区域点击
                     }
                     touchDown = false
@@ -398,10 +452,21 @@ class PageTurnView @JvmOverloads constructor(
         pageAnimator.onDraw(canvas)
         super.dispatchDraw(canvas)
     }
-
+    private fun debouncePageChange(action: () -> Unit) {
+        pageChangeJob?.cancel()
+        pageChangeJob = viewScope.launch {
+            delay(DEBOUNCE_DURATION)
+            action()
+        }
+    }
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        viewScope.cancel()
+    }
     // 获取页面视图
     fun getPreviousPage(): View? = previousPage
     fun getCurrentPage(): View? = currentPage
     fun getNextPage(): View? = nextPage
+    fun getLastTouchX(): Float = lastTouchX
+    fun getLastTouchY(): Float = lastTouchY
 }
-
